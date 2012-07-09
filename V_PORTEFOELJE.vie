@@ -1,0 +1,92 @@
+CREATE OR REPLACE FORCE VIEW V_PORTEFOELJE
+AS 
+select
+ port.PORTEFOELJE_ID
+ ,port.PORTEFOELJE
+ ,port.NAVN
+ ,port.PORTEFOELJETYPE_ID
+ ,port.ADRESSE1
+ ,port.ADRESSE2
+ ,port.ADRESSE3
+ ,port.POSTNRBY
+ ,port.ATTENTION
+ ,port.VALUTA_ID
+ ,port.KONTOPLAN_ID
+ ,pap.PAPIR_ID
+ ,port.PORTGRUPPE_ID
+ ,port.TILSYNS_LBNR
+ ,port.REG_DATO
+ ,port.REG_USER
+ ,port.MOD_DATO
+ ,port.MOD_USER
+ ,port.EMISTILLAEG
+ ,port.INDLFRADRAG
+ ,port.IVAFRUND
+ ,port.STYKSTR
+ ,port.CVR
+ ,port.LUKDATO
+ ,port.OMKVAEGT
+ ,port.BENCHMARKPAPIR_ID
+ ,port.TYPEKODER
+ ,port.SORTERING
+ ,port.EMINDTAEGT
+ ,port.KORTNAVN
+ ,port.BEHFORSINKELSE
+ ,port.FREE_TXT01
+ ,port.FREE_TXT02
+ ,port.FREE_TXT03
+ ,port.FREE_NUM01
+ ,port.FREE_NUM02
+ ,port.FREE_NUM03
+ ,port.FREE_DATE01
+ ,port.FREE_DATE02
+ ,port.FREE_DATE03
+ ,port.STARTDATO
+ ,port.FOERSTEREGNSKABDATO
+ ,port.FUTUREPAPIR_ID
+ ,port.KODE1
+ ,port.AGSTARTDATO
+ ,port.INDEX_JN
+ ,port.BENCHMARKSTARTDATO
+ ,port.REG_TILL_FT
+ ,port.OPSPARINGSTYPE
+ ,port.REG_VP_JN
+ ,port.INVESTERINGSPOLITIK
+ ,port.INVESTERINGSMARKED
+ ,port.CLOSE_OPEN_CO
+ ,port.UCITS_UI
+ ,port.INVESTORGRUPPE_DI
+ ,port.RISIKOKLASSE_HJL
+ ,port.INVESTERINGSHORISONT
+ ,port.INDLINDTAEGT
+ ,port.EXTERNALID1
+ ,pap.papir||pap.chkciffer Papir
+ ,pap.kursenhed
+ ,pap.notering_Id
+ ,val.valuta
+ ,pg.portgruppe
+ ,pg.NAVN           pg_navn
+ ,pg.TILSYNS_NR
+ ,pg.PORTGRPTYPE_ID
+ ,pgt.navn          pgt_navn
+ ,pt.portefoeljetype_kode
+from valuta val,
+     SYS_PORTGRPTYPE pgt,
+     sys_portefoeljetype pt,
+     portefoeljegruppe pg,
+     papir pap,
+     portefoelje port,
+     portfolioaccess pa
+where pa.username = user
+  and port.portefoelje_id = pa.portefoelje_id
+  and pg.portgruppe_id = port.portgruppe_id
+  and val.valuta_Id = port.valuta_Id
+  and pgt.portgrptype_id = pg.portgrptype_Id
+  and pap.papir_Id(+) = f_portpap(port.portefoelje_id,sysdate)
+  and pt.portefoeljetype_Id = port.portefoeljetype_Id
+/
+
+COMMENT ON TABLE V_PORTEFOELJE IS 'Stamoplysninger for porteføljer'
+/
+
+
