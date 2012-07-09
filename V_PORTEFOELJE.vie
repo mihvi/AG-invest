@@ -22,7 +22,7 @@ select
  ,port.EMISTILLAEG
  ,port.INDLFRADRAG
  ,port.IVAFRUND
- ,port.STYKSTR
+ ,pap.STYKSTR
  ,port.CVR
  ,port.LUKDATO
  ,port.OMKVAEGT
