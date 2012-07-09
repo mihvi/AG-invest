@@ -1,0 +1,451 @@
+create or replace Package Body pac_dbcomp
+As
+   Function z_port (
+      p_mult   In   Boolean
+     ,z_port   In   Varchar2)
+      Return Varchar2
+   Is
+      wkstr   Varchar2 (32000);
+   Begin
+      If p_mult
+      Then
+         pac_sql.build_form_selectmult
+                              ('P_PORT'
+                              ,    'Select p.portefoelje_Id,p.portefoelje xx'
+                                || ' from v_portefoelje p '
+                                || ' where p.portefoeljetype_id <> 5 '
+                                || ' order by p.portefoelje '
+                              ,'onChange="CheckList(this,''Z_PORT'');"'
+                              ,z_port,4
+                              ,wkstr);
+      Else
+         pac_sql.build_form_select
+            ('P_PORT'
+            ,pac_sql.build_select_sql
+                (   'select p.portefoelje_id,p.portefoelje||''-''||p.navn navn '
+                 || ' from v_portefoelje p '
+                 || ' where (p.portefoeljetype_id <> 5 or portefoelje_id = '||nvl(z_port,'0')||')'
+                 || ' order by p.portefoelje '
+                ,'portefoelje_id'
+                ,pac_glo.ag_to_number (z_port))
+            ,' '
+            ,False
+            ,wkstr);
+      End If;
+
+      Return (wkstr);
+   End;
+
+   Function port_one_r (
+      p_portefoelje_id   In   Number)
+      Return Varchar2
+   Is
+      wktxt   Varchar2 (32000);
+   Begin
+      pac_sql.build_form_select
+         ('P_PORTEFOELJE_ID'
+         ,pac_sql.build_select_sql
+             (   'select p.portefoelje_id,p.portefoelje||''-''||p.navn navn '
+              || ' from v_portefoelje p '
+              || ' where p.portefoeljetype_id <> 5 '
+              || ' order by p.portefoelje '
+             ,'portefoelje_id'
+             ,p_portefoelje_id)
+         ,Null
+         ,False
+         ,wktxt);
+      Return (wktxt);
+   End;
+
+   Function valuta_id (
+      p_valuta_id   In   Number)
+      Return Varchar2
+   Is
+      wkvalliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_VALUTA_ID'
+         ,pac_sql.build_select_sql
+             ('select valuta_id,valuta from valuta order by sortering,valuta '
+             ,'valuta_id'
+             ,p_valuta_id)
+         ,Null
+         ,False
+         ,wkvalliste);
+      Return (wkvalliste);
+   End;
+
+   Function refval (
+      p_refval_   In   Varchar2)
+      Return Varchar2
+   Is
+      wkvalliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_REFVAL_'
+         ,pac_sql.build_select_sql
+             ('select valuta,valuta xx from valuta order by sortering,valuta '
+             ,'valuta'
+             ,p_refval_)
+         ,Null
+         ,False
+         ,wkvalliste);
+      Return (wkvalliste);
+   End;
+
+   Function modval (
+      p_modval_   In   Varchar2)
+      Return Varchar2
+   Is
+      wkvalliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_MODVAL_'
+         ,pac_sql.build_select_sql
+             ('select valuta,valuta xx from valuta order by sortering,valuta '
+             ,'valuta'
+             ,p_modval_)
+         ,Null
+         ,False
+         ,wkvalliste);
+      Return (wkvalliste);
+   End;
+
+   Function valuta (
+      p_valuta   In   Varchar2)
+      Return Varchar2
+   Is
+      wkvalliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_VALUTA'
+         ,pac_sql.build_select_sql
+             ('select valuta,valuta xx from valuta order by sortering,valuta '
+             ,'valuta'
+             ,p_valuta)
+         ,Null
+         ,False
+         ,wkvalliste);
+      Return (wkvalliste);
+   End;
+
+   Function opttype (
+      p_opttype   In   Varchar2)
+      Return Varchar2
+   Is
+      wkcpliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_OPTTYPE'
+         ,pac_sql.build_select_sql
+                         ('select type,type xx from v_opttype order by type '
+                         ,'type'
+                         ,p_opttype)
+         ,Null
+         ,False
+         ,wkcpliste);
+      Return (wkcpliste);
+   End;
+
+   Function redmtype (
+      p_redmtype   In   Varchar2)
+      Return Varchar2
+   Is
+      wkredmliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_REDMTYPE'
+         ,pac_sql.build_select_sql
+             ('select redm_id,redm_type xx from sys_redmtype order by redm_type '
+             ,'redm_id'
+             ,p_redmtype)
+         ,Null
+         ,False
+         ,wkredmliste);
+      Return (wkredmliste);
+   End;
+
+   Function portgruppe_id (
+      p_portgruppe_id   In   Number)
+      Return Varchar2
+   Is
+      wkliste   Varchar2 (10000);
+   Begin
+      pac_sql.build_form_select
+         ('P_PORTGRUPPE_ID'
+         ,pac_sql.build_select_sql
+             ('select portgruppe_Id,navn from v_portefoeljegruppe order by navn '
+             ,'portgruppe_id'
+             ,p_portgruppe_id)
+         ,Null
+         ,False
+         ,wkliste);
+      Return (wkliste);
+   End;
+
+   Function rente_index (
+      p_papir_id   In   Number)
+      Return Varchar2
+   Is
+      wktxt   Varchar2 (32000);
+   Begin
+      pac_sql.build_form_select
+              ('P_RINDPAPIR_ID'
+              ,pac_sql.build_select_sql (   'select papir_id,papir indeks '
+                                         || ' from papir  '
+                                         || ' where papirtype_id = 18'
+                                         || ' order by papir '
+                                        ,'papir_id'
+                                        ,p_papir_id)
+              ,Null
+              ,False
+              ,wktxt);
+      Return (wktxt);
+   End;
+
+   Function dagemd_id (
+      p_dagemd_id   In   Number)
+      Return Varchar2
+   Is
+      wktxt   Varchar2 (32000);
+   Begin
+      pac_sql.build_form_select
+                     ('P_DAGEMD_ID'
+                     ,pac_sql.build_select_sql (   'select dagemd_id,navn '
+                                                || ' from sys_dagemd  '
+                                                || '  order by 1 '
+                                               ,'dagemd_id'
+                                               ,p_dagemd_id)
+                     ,Null
+                     ,False
+                     ,wktxt);
+      Return (wktxt);
+   End;
+
+   Function dageaar_id (
+      p_dageaar_id   In   Number)
+      Return Varchar2
+   Is
+      wktxt   Varchar2 (32000);
+   Begin
+      pac_sql.build_form_select
+                    ('P_DAGEAAR_ID'
+                    ,pac_sql.build_select_sql (   'select dageaar_id,navn '
+                                               || ' from sys_dageaar  '
+                                               || '  order by 1 '
+                                              ,'dageaar_id'
+                                              ,p_dageaar_id)
+                    ,Null
+                    ,False
+                    ,wktxt);
+      Return (wktxt);
+   End;
+
+   Function cp_liste (
+      prm_counterpart_id   In   Number
+     ,prm_onchange         In   Varchar2)
+      Return Varchar2
+   Is
+      wkcpliste   Varchar2 (20000);
+   Begin
+      pac_sql.build_form_select
+         ('P_COUNTERPART_ID'
+         ,pac_sql.build_select_sql (   'select counterpart_id,name '
+                                    || ' from Counterpart '
+                                    || ' where account_id = f_myaccount() '
+                                    || ' and ctype = ''P'''
+                                    || '  order by name '
+                                   ,'counterpart_id'
+                                   ,prm_counterpart_id)
+         ,prm_onchange
+         ,False
+         ,wkcpliste);
+
+      If prm_onchange Is Not Null
+      Then
+         wkcpliste := Replace (wkcpliste
+                              ,'<select'
+                              ,'<select class=l2');
+      End If;
+
+      Return (wkcpliste);
+   End;
+
+   Function cp_liste2 (
+      prm_counterpart_id   In   Number
+     ,prm_onchange         In   Varchar2
+     ,prm_null             In   Number Default 0)
+      Return Varchar2
+   Is
+      wkcpliste   Varchar2 (20000);
+      wknull      Boolean          := True;
+   Begin
+      If prm_null = 1
+      Then
+         wknull := False;
+      End If;
+
+      pac_sql.build_form_select
+          ('P_COUNTERPART_ID2'
+          ,pac_sql.build_select_sql (   'select counterpart_id,name '
+                                     || ' from Counterpart '
+                                     || ' where account_id = f_myaccount() '
+                                     || ' and ctype = ''C'''
+                                     || '  order by name '
+                                    ,'counterpart_id'
+                                    ,prm_counterpart_id)
+          ,prm_onchange
+          ,wknull
+          ,wkcpliste);
+
+      If prm_onchange Is Not Null
+      Then
+         wkcpliste := Replace (wkcpliste
+                              ,'<select'
+                              ,'<select class=l2');
+      End If;
+
+      Return (wkcpliste);
+   End;
+
+
+Procedure validate_port(wkport in out varchar2
+                        ,wkZport in out varchar2
+                        ,wkErrorMsg in out varchar2) is
+
+ wkNewZPort varchar2(20000);
+
+ wkMore varchar2(20) := '(flere)';
+
+ wkCount integer;
+
+Begin
+
+  wkErrorMsg := null;
+
+  If wkPort is not null and lower(wkPort) <> wkMore then
+
+    wkNewZPort := null;
+    wkPort := upper(trim(wkPort));
+
+     for row in (select portefoelje_Id,portefoelje
+                 from v_portefoelje
+                 where portefoelje like upper(trim(wkPort)) ) Loop
+
+       wkNewZPort := wkNewZPort||row.portefoelje_Id||' ';
+
+   end loop;
+
+   If wkNewZPort is null then
+
+     wkErrorMsg := 'Ugyldig portefølje: '||wkPort;
+
+   end if;
+
+   wkZPort := wkNewZPort;
+
+
+  Elsif wkZPort is not null then
+
+     wkNewZPort := null;
+
+     wkCount := 0;
+     for row in (select portefoelje_Id,portefoelje
+                 from v_portefoelje
+                 where instr(' '||wkZPort||' ',' '||portefoelje_id||' ') > 0) Loop
+
+       wkCount := wkCount + 1;
+
+       wkPort := row.portefoelje;
+       wkNewZPort := wkNewZPort||row.portefoelje_Id||' ';
+
+    End loop;
+
+    If wkNewZPort is null then
+
+      wkErrorMsg := 'Ingen portefølje(r) valgt';
+
+    End if;
+
+    If wkCount > 1 Then
+
+     wkPort := wkMore;
+
+    End if;
+
+
+  End if;
+
+  wkZPort := wkNewZPort;
+
+
+End;
+
+
+Procedure zport_lov (
+          z_caller_Url in varchar2 default null
+         ,z_filter    in varchar2 default null
+         ,p_port      in varchar2 default null
+         ,z_port      In Varchar2 default null
+          ,xx in varchar2 default null
+        ,z_action in varchar2 default null
+   )
+
+Is
+
+  wkstr   Varchar2 (32000);
+  wkVartab pac_sql.vartable;
+  wkForm pac_form.form_type;
+
+  wkPort varchar2(50) ;
+  wkZPort varchar2(5000) := z_port;
+
+  wkError varchar2(1000);
+
+Begin
+
+  pac_form.get ('LOVZPORT', wkform);
+
+  validate_port(wkPort,wkZport,wkError);
+
+  If z_action = 'UPDATE' Then
+
+    htp.p('<html><body><script language="javascript">');
+    htp.p('opener.document.all.P_PORT.value = '''||wkport||''';');
+    htp.p(' opener.document.all.Z_PORT.value = '''||wkZPort||''';');
+    htp.p('opener.document.all.P_PORT.focus();');
+    htp.p('opener.document.all.P_PORT.form.submit();');
+    htp.p('window.close();');
+    htp.p('</script></body></html>');
+    return;
+  End if;
+
+
+
+  pac_sql.build_form_selectmult
+                              ('P_PORT'
+                              ,    'Select p.portefoelje_Id,p.portefoelje||''-''||navn xx'
+                                || ' from v_portefoelje p '
+                                || ' order by p.portefoelje '
+                              ,'onChange="CheckList(this,''Z_PORT'');" name=xx '
+                              ,z_port,20
+                              ,wkstr);
+
+   pac_sql.add_var(wkVartab,'Z_FILTER',z_filter);
+   pac_sql.add_var(wkVartab,'Z_CALLER_URL',z_caller_url);
+   pac_sql.add_var(wkVartab,'P_PORT',wkport);
+   pac_sql.add_var(wkVartab,'Z_PORT',wkZport);
+   pac_sql.add_var(wkVartab,'PORTLIST',wkStr);
+
+   pac_form.display(wkForm,'OVS',wkVartab);
+
+Exception
+when others then
+   cg$errors.push(sqlerrm);
+   pac_form.display(wkForm,'OVS',wkVartab);
+End;
+
+
+
+End pac_dbcomp;
+/
