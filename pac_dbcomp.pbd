@@ -14,6 +14,7 @@ As
                               ,    'Select p.portefoelje_Id,p.portefoelje xx'
                                 || ' from v_portefoelje p '
                                 || ' where p.portefoeljetype_id <> 5 '
+                                || ' and p.lukdato is null '
                                 || ' order by p.portefoelje '
                               ,'onChange="CheckList(this,''Z_PORT'');"'
                               ,z_port,4
@@ -25,6 +26,7 @@ As
                 (   'select p.portefoelje_id,p.portefoelje||''-''||p.navn navn '
                  || ' from v_portefoelje p '
                  || ' where (p.portefoeljetype_id <> 5 or portefoelje_id = '||nvl(z_port,'0')||')'
+                 || ' and p.lukdato is null '
                  || ' order by p.portefoelje '
                 ,'portefoelje_id'
                 ,pac_glo.ag_to_number (z_port))
@@ -48,6 +50,7 @@ As
              (   'select p.portefoelje_id,p.portefoelje||''-''||p.navn navn '
               || ' from v_portefoelje p '
               || ' where p.portefoeljetype_id <> 5 '
+              || ' and p.lukdato is null '
               || ' order by p.portefoelje '
              ,'portefoelje_id'
              ,p_portefoelje_id)
@@ -426,6 +429,7 @@ Begin
                               ('P_PORT'
                               ,    'Select p.portefoelje_Id,p.portefoelje||''-''||navn xx'
                                 || ' from v_portefoelje p '
+                                || ' where p.lukdato is null '
                                 || ' order by p.portefoelje '
                               ,'onChange="CheckList(this,''Z_PORT'');" name=xx '
                               ,z_port,20
