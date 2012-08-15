@@ -1,0 +1,956 @@
+create or replace
+Package Body m_flstran
+As
+   Procedure check_afrkonto (
+      prmkonto          In   Varchar2
+     ,prmkontoplan_id   In   Number)
+   Is
+      wkpapir   papir.papir%Type;
+   Begin
+      If prmkonto Is Not Null
+      Then
+         Select papir
+           Into wkpapir
+           From papir
+          Where papirtype_id = 3
+            And papirgruppe_id In (45, 46)
+            And papir = prmkonto
+            And (kontoplan_id = prmkontoplan_id Or prmkontoplan_id Is Null)
+            And rownum = 1;
+      End If;
+   Exception
+      When no_data_found
+      Then
+         cg$errors.push (msg      =>    'Fejl: '
+                                     || prmkonto
+                                     || ' er ikke en afregningskonto'
+                        ,loc      => 'm_flstran.chk_afrkonto');
+   End;
+
+   Procedure ftport (
+      p_flstran_id     In   Varchar2 Default Null
+     ,p_port_id        In   Varchar2 Default Null
+     ,p_regmgd         In   Varchar2 Default Null
+     ,p_regsalg        In   Varchar2 Default Null
+     ,p_afrpapir       In   Varchar2 Default Null
+     ,p_old_afrpapir   In   Varchar2 Default Null
+     ,p_termindato1    In   Varchar2 Default Null
+     ,p_termindato2    In   Varchar2 Default Null
+     ,z_action         In   Varchar2 Default Null)
+   Is
+      wkvartab   pac_sql.vartable;
+      Row        v_nyflstranport%Rowtype;
+      rowft      nyflstran%Rowtype;
+   Begin
+      check_afrkonto (p_afrpapir, Null);
+
+      Begin
+         Select *
+           Into Row
+           From v_nyflstranport
+          Where flstransaktion_id = pac_glo.ag_to_number (p_flstran_id)
+            And portefoelje_id = pac_glo.ag_to_number (p_port_id);
+
+         Select *
+           Into rowft
+           From nyflstran
+          Where flstransaktion_id = pac_glo.ag_to_number (p_flstran_id);
+      Exception
+         When Others
+         Then
+            Null;
+      End;
+
+      If z_action = 'COMMIT' And Not pac_glo.errors_in_stack
+      Then
+         Update nyflstranport
+            Set reg_maengde =
+                            nvl (pac_glo.ag_to_number (p_regmgd), reg_maengde)
+               ,reg_salg = nvl (pac_glo.ag_to_number (p_regsalg), reg_salg)
+               ,afregnpapir = p_afrpapir
+          Where flstransaktion_id = pac_glo.ag_to_number (p_flstran_id)
+            And portefoelje_id = pac_glo.ag_to_number (p_port_id);
+
+         Delete      nytransaktion
+               Where flstransaktion_id = rowft.flstransaktion_id
+                 And portefoelje_id = Row.portefoelje_id;
+
+         If p_old_afrpapir = 'UPDATE'
+         Then
+            Delete      nyflstranvalutakurs
+                  Where flstransaktion_id = rowft.flstransaktion_id;
+         End If;
+
+         pac_nyflstran_tab.tran (rowft, Row.portefoelje_id);
+         ny (p_flstran_id       => p_flstran_id
+            ,p_termindato1      => p_termindato1
+            ,p_termindato2      => p_termindato2
+            ,z_action           => 'XX');
+         Return;
+      End If;
+
+      pac_sql.add_var (wkvartab
+                      ,'P_FLSTRAN_ID'
+                      ,Row.flstransaktion_id);
+      pac_sql.add_var (wkvartab
+                      ,'P_PORT_ID'
+                      ,Row.portefoelje_id);
+      pac_sql.add_var (wkvartab
+                      ,'P_PORTX'
+                      ,Row.portefoelje);
+      pac_sql.add_var (wkvartab
+                      ,'P_BERMGD'
+                      ,Row.beregnet_maengde);
+      pac_sql.add_var (wkvartab
+                      ,'P_BERSALG'
+                      ,Row.beregnet_salg);
+      pac_sql.add_var (wkvartab
+                      ,'P_REGMGD'
+                      ,Row.reg_maengde);
+      pac_sql.add_var (wkvartab
+                      ,'P_REGSALG'
+                      ,Row.reg_salg);
+      pac_sql.add_var (wkvartab
+                      ,'P_TERMINDATO1'
+                      ,p_termindato1);
+      pac_sql.add_var (wkvartab
+                      ,'P_TERMINDATO2'
+                      ,p_termindato2);
+      pac_sql.add_var (wkvartab
+                      ,'P_AFRPAPIR'
+                      ,nvl (p_afrpapir, Row.afregnpapir));
+      pac_form.display ('FLSPORT'
+                       ,Null
+                       ,'OVS'
+                       ,wkvartab
+                       ,Null);
+   End;
+
+   Procedure vis_flstran (
+      p_flstran_id   In   Varchar2 Default Null
+     ,p_gruppe_id    In   Varchar2 Default Null)
+   Is
+      wkvartab    pac_sql.vartable;
+      wkform      pac_form.form_type;
+      wksqltext   Varchar2 (2000);
+      wknum       Number;
+   Begin
+      pac_form.get ('VISFLS', wkform);
+
+      If p_gruppe_id Is Null
+      Then
+         wksqltext := wkform.sql_text;
+         wknum := instr (wksqltext, ',nyflstrangruppe');
+         wksqltext := substr (wksqltext
+                             ,1
+                             , wknum - 1);
+         wksqltext :=
+               wksqltext
+            || ' where tra.flstransaktion_id = '
+            || p_flstran_id
+            || ' order by portefoelje';
+         wkform.sql_text := wksqltext;
+      End If;
+
+      pac_sql.add_var (wkvartab
+                      ,'P_FLSTRAN_ID'
+                      ,pac_glo.ag_to_number (p_flstran_id));
+      pac_sql.add_var (wkvartab
+                      ,'P_GRUPPE_ID'
+                      ,pac_glo.ag_to_number (p_gruppe_id));
+      pac_form.display (wkform
+                       ,'OVS'
+                       ,wkvartab);
+   End;
+
+   Procedure vk (
+      p_nftvk_id   In   Varchar2 Default Null
+     ,p_kurs       In   Varchar2 Default Null)
+   Is
+      wkflstran_id   Number;
+   Begin
+      If pac_glo.ag_to_number (p_kurs) Is Not Null
+      Then
+         Update nyflstranvalutakurs
+            Set kurs = pac_glo.ag_to_number (p_kurs)
+          Where nftvk_id = pac_glo.ag_to_number (p_nftvk_id);
+      End If;
+
+      Select Max (flstransaktion_id)
+        Into wkflstran_id
+        From nyflstranvalutakurs
+       Where nftvk_id = pac_glo.ag_to_number (p_nftvk_id);
+
+      valkurs (to_char (wkflstran_id));
+   End;
+
+   Procedure ny (
+      p_flstran_id     In   Varchar2 Default Null
+     ,p_trantype_id    In   Varchar2 Default Null
+     ,p_papir1         In   Varchar2 Default Null
+     ,p_papir2         In   Varchar2 Default Null
+     ,p_blbenhed       In   Varchar2 Default Null
+     ,p_byt1           In   Varchar2 Default Null
+     ,p_byt2           In   Varchar2 Default Null
+     ,p_skat_pct       In   Varchar2 Default Null
+     ,p_refund_pct     In   Varchar2 Default Null
+     ,p_termindato1    In   Varchar2 Default Null
+     ,p_termindato2    In   Varchar2 Default Null
+     ,p_valoerdato     In   Varchar2 Default Null
+     ,p_bogfdato       In   Varchar2 Default Null
+     ,p_kurs           In   Varchar2 Default Null
+     ,p_gruppe_id      In   Varchar2 Default Null
+     ,p_afrpapir       In   Varchar2 Default Null
+     ,p_old_afrpapir   In   Varchar2 Default Null
+     ,z_action         In   Varchar2 Default Null)
+   Is
+      wkvartab          pac_sql.vartable;
+      Row               nyflstran%Rowtype;
+      rowv              v_nyflstran%Rowtype;
+      wkttliste         Varchar2 (1000);
+      wkaction          Varchar2 (30);
+      wki               Integer;
+      wktt              sys_trantype.trantype_kode%Type;
+      wkpapir1          papir.papir%Type;
+      wkdato1           Date            := pac_glo.ag_to_date (p_termindato1);
+      wkdato2           Date            := pac_glo.ag_to_date (p_termindato2);
+      wkforrigetermin   Date;
+      wknaestetermin    Date;
+      wkexkupon         Boolean;
+      wkdagemd_id       Number;
+      wkaardage         Number;
+      wkgruppe_id       Number          := pac_glo.ag_to_number (p_gruppe_id);
+      wkflstran_id      Number         := pac_glo.ag_to_number (p_flstran_id);
+      rowpapir          papir%Rowtype;
+      wkpapir2          papir.papir%Type;
+      wkbogfdato        Varchar2 (10)                     := p_bogfdato;
+      wkvaloerdato      Varchar2 (10)                     := p_valoerdato;
+      wkafrpapir        Varchar2 (12)                     := p_afrpapir;
+
+      Cursor cur_papir (
+         c_dato   In   Date)
+      Is
+         Select pap.papir_id
+               ,pap.papir
+               ,uds.land_id
+           From papir pap
+               ,sys_papirtype spt
+               ,sys_papirart spa
+               ,udsteder uds
+               ,sys_parm sp
+          Where spt.papirart_id = spa.papirart_id
+            And pap.papirtype_id = spt.papirtype_id
+            And spa.papirart_kode = 'OBLI'
+            And pap.papir_id In (Select papir_id
+                                   From transaktionbeholdning tb)
+            And pap.udsteder_id = uds.udsteder_id
+            And spt.papirtype_kode <> 'NOBL'
+            And (spt.papirtype_kode <> 'UDTR' Or sp.Value = 'N')
+            And pap.udloebdato >= c_dato
+            And sp.Name = 'UDTRKRENTE';
+
+      Cursor cur_konv_papir (
+         c_papir1   In   Varchar2
+        ,c_papir2   In   Varchar2)
+      Is
+         Select pap1.papir papir1
+               ,pap1.papir_id papir1_id
+               ,pap2.papir papir2
+               ,pap2.papir_id papir2_id
+               ,pap2.underligpapir_id
+           From papir pap1
+               ,papir pap2
+          Where pap1.papir = c_papir1 And pap2.papir = c_papir2
+         Union All
+         Select Max (papir1) papir1
+               ,Max (papir1_id) papir1_id
+               ,Max (papir2) papir2
+               ,Max (papir2_id) papir2_id
+               ,Max (underligpapir_id) underligpapir_id
+           From (Select pap1s.papir papir1
+                       ,pap1s.papir_id papir1_id
+                       ,Null papir2
+                       ,Null papir2_id
+                       ,Null underligpapir_id
+                   From papir pap1
+                       ,papir pap1s
+                  Where pap1s.underligpapir_id = pap1.papir_id
+                    And pap1.papir = c_papir1
+                    And pap1s.papirtype_id = 27
+                 Union All
+                 Select Null papir1
+                       ,Null papir1_id
+                       ,pap1s.papir papir2
+                       ,pap1s.papir_id papir2_id
+                       ,pap1.papir_id underligpapir_id
+                   From papir pap1
+                       , (Select papir
+                                ,papir_id
+                                ,underligpapir_id
+                            From papir
+                           Where papirtype_id = 27) pap1s
+                  Where pap1s.underligpapir_id(+) = pap1.papir_id
+                        And pap1.papir = c_papir2)
+         Having Max (papir1_id) <> 0;
+   Begin
+      wkaction := 'Begin';
+      check_afrkonto (wkafrpapir, Null);
+      wkaction := 'Line 296';
+
+      If p_flstran_id Is Not Null
+      Then
+         pac_nyflstran_tab.sel (p_flstran_id, Row);
+         pac_nyflstran_tab.sel_v (p_flstran_id, rowv);
+         wkbogfdato := to_char (Row.bogfdato, 'dd-mm-yyyy');
+         wkafrpapir := Row.afregnpapir;
+         wkvaloerdato := Row.valoerdato;
+      End If;
+
+      wkaction := 'Line 305';
+
+      If z_action In ('COMMIT', 'REFRESH') And Not pac_glo.errors_in_stack
+      Then
+         wkbogfdato :=
+            nvl (p_bogfdato
+                ,nvl (p_termindato2, to_char (trunc (sysdate), 'dd-mm-yyyy')));
+         wkafrpapir := p_afrpapir;
+         wkvaloerdato := p_valoerdato;
+
+         Select Max (trantype_kode)
+           Into wktt
+           From sys_trantype
+          Where trantype_id = pac_glo.ag_to_number (p_trantype_id);
+
+         If p_old_afrpapir = 'UPDATE'
+         Then
+            Delete      nyflstranvalutakurs
+                  Where flstransaktion_id In (
+                                     Select nfg.flstransaktion_id
+                                       From nyflstrangruppe nfg
+                                      Where nfg.flstrangruppe_id = wkgruppe_id)
+                     Or (    flstransaktion_id = wkflstran_id
+                         And wkgruppe_id Is Null);
+
+            Delete      nytransaktion nt
+                  Where nt.flstransaktion_id In (
+                                      Select nfg.flstransaktion_id
+                                        From nyflstrangruppe nfg
+                                       Where nfg.flstrangruppe_id =
+                                                                   wkgruppe_id)
+                     Or (    flstransaktion_id = wkflstran_id
+                         And wkgruppe_id Is Null);
+         End If;
+
+         wkaction := 'Line 338';
+
+         If wktt In ('KONV', 'RENTE')
+         Then
+            If wkgruppe_id Is Null
+            Then
+               Select seq_diverse.Nextval
+                 Into wkgruppe_id
+                 From dual;
+            End If;
+
+            If wktt = 'RENTE'
+            Then
+               For row_papir In cur_papir (wkdato1)
+               Loop
+                  pac_rente.papir_terminer (row_papir.papir_id
+                                           ,wkdato1
+                                           ,wkforrigetermin
+                                           ,wknaestetermin
+                                           ,wkexkupon
+                                           ,wkdagemd_id
+                                           ,wkaardage);
+
+                  If wknaestetermin <= wkdato2
+                  Then
+                     Select Max (nft.flstransaktion_id)
+                       Into wkflstran_id
+                       From nyflstran nft
+                           ,nyflstrangruppe nfg
+                      Where nft.flstransaktion_id = nfg.flstransaktion_id
+                        And nfg.flstrangruppe_id = wkgruppe_id
+                        And nft.papir1_id = row_papir.papir_id;
+
+                     pac_nyflstran_tab.setrow
+                        (Row
+                        ,p_flstransaktion_id      => wkflstran_id
+                        ,p_papir1                 => row_papir.papir
+                        ,p_trantype_id            => p_trantype_id
+                        ,p_termindato             => to_char (wknaestetermin
+                                                             ,'dd-mm-yyyy')
+                        ,p_valoerdato             => to_char
+                                                        (pac_rente.businessday
+                                                            (wknaestetermin
+                                                            ,0
+                                                            ,row_papir.land_id
+                                                            ,1)
+                                                        ,'dd-mm-yyyy')
+                        ,p_bogfdato               => wkbogfdato
+                        ,p_afrpapir               => wkafrpapir
+                        ,p_bytteforhold1          => '1'
+                        ,p_bytteforhold2          => '1');
+
+                     If Row.flstransaktion_id Is Null
+                     Then
+                        pac_nyflstran_tab.ins (Row);
+
+                        Insert Into nyflstrangruppe
+                                    (flstrangruppe_id
+                                    ,flstransaktion_id)
+                             Values (wkgruppe_id
+                                    ,Row.flstransaktion_id);
+                     Else
+                        pac_nyflstran_tab.upd (Row);
+                     End If;
+                  End If;
+               End Loop;
+            Elsif wktt = 'KONV'
+            Then
+               wkaction := 'Konv1';
+
+               For row_konv_papir In cur_konv_papir (p_papir1, p_papir2)
+               Loop
+                  Select Max (nft.flstransaktion_id)
+                    Into wkflstran_id
+                    From nyflstran nft
+                        ,nyflstrangruppe nfg
+                   Where nft.flstransaktion_id = nfg.flstransaktion_id
+                     And nfg.flstrangruppe_id = wkgruppe_id
+                     And nft.papir1_id = row_konv_papir.papir1_id;
+
+                  wkpapir2 := row_konv_papir.papir2;
+
+                  If nvl (row_konv_papir.papir2_id, 0) = 0
+                  Then
+                     pac_alaan.opret_ssalg (row_konv_papir.underligpapir_id
+                                           ,rowpapir);
+                     wkpapir2 := rowpapir.papir;
+                  End If;
+
+                  wkaction := 'Konv2';
+                  pac_nyflstran_tab.setrow
+                                         (Row
+                                         ,p_flstransaktion_id      => wkflstran_id
+                                         ,p_papir1                 => row_konv_papir.papir1
+                                         ,p_papir2                 => wkpapir2
+                                         ,p_trantype_id            => p_trantype_id
+                                         ,p_termindato             => p_termindato1
+                                         ,p_valoerdato             => wkvaloerdato
+                                         ,p_bogfdato               => wkbogfdato
+                                         ,p_afrpapir               => wkafrpapir
+                                         ,p_beloeb_enhed           => p_blbenhed
+                                         ,p_skat_pct               => p_skat_pct
+                                         ,p_refund_pct             => p_refund_pct
+                                         ,p_bytteforhold1          => p_byt1
+                                         ,p_bytteforhold2          => p_byt2
+                                         ,p_salgskurs              => p_kurs);
+
+                  If Row.flstransaktion_id Is Null
+                  Then
+                     pac_nyflstran_tab.ins (Row);
+
+                     Insert Into nyflstrangruppe
+                                 (flstrangruppe_id
+                                 ,flstransaktion_id)
+                          Values (wkgruppe_id
+                                 ,Row.flstransaktion_id);
+                  Else
+                     pac_nyflstran_tab.upd (Row);
+                  End If;
+               End Loop;
+            End If;
+         Else
+            If wktt = 'UDTRK'
+            Then
+               Select Max (p1.papir)
+                 Into wkpapir1
+                 From papir p2
+                     ,papir p1
+                Where p1.papirtype_id = 6
+                  And p2.papir_id = p1.underligpapir_id
+                  And p2.papir = Ltrim (Rtrim (upper (p_papir2)));
+            Else
+               wkpapir1 := p_papir1;
+            End If;
+
+            pac_nyflstran_tab.setrow (Row
+                                     ,p_flstransaktion_id      => p_flstran_id
+                                     ,p_papir1                 => wkpapir1
+                                     ,p_papir2                 => p_papir2
+                                     ,p_trantype_id            => p_trantype_id
+                                     ,p_termindato             => p_termindato1
+                                     ,p_valoerdato             => wkvaloerdato
+                                     ,p_bogfdato               => wkbogfdato
+                                     ,p_afrpapir               => wkafrpapir
+                                     ,p_beloeb_enhed           => p_blbenhed
+                                     ,p_skat_pct               => p_skat_pct
+                                     ,p_refund_pct             => p_refund_pct
+                                     ,p_bytteforhold1          => p_byt1
+                                     ,p_bytteforhold2          => p_byt2
+                                     ,p_salgskurs              => p_kurs);
+
+            If Row.flstransaktion_id Is Null
+            Then
+               pac_nyflstran_tab.ins (Row);
+            Else
+               pac_nyflstran_tab.upd (Row);
+            End If;
+
+            pac_nyflstran_tab.sel_v (Row.flstransaktion_id, rowv);
+         End If;
+      End If;
+
+      If z_action = 'COMMIT' And Not pac_glo.errors_in_stack
+      Then
+         If wktt In ('RENTE', 'KONV')
+         Then
+            wki := 0;
+
+            Begin
+               For rowgr In (Select nft.flstransaktion_id
+                               From nyflstran nft
+                                   ,nyflstrangruppe nfg
+                              Where nft.flstransaktion_id =
+                                                         nfg.flstransaktion_id
+                                And nfg.flstrangruppe_id = wkgruppe_id)
+               Loop
+                  htp.p ('wkgruppe ' || wkgruppe_id);
+                  pac_nyflstran_tab.sel (rowgr.flstransaktion_id, Row);
+                  htp.p ('tran ' || rowgr.flstransaktion_id);
+
+                  For rowtr In
+                     (Select transaktion_id
+                        From nytransaktion nt
+                       Where flstransaktion_id = rowgr.flstransaktion_id
+                         And Exists (
+                                Select 1
+                                  From nyflstranport nftp
+                                 Where nftp.flstransaktion_id =
+                                                          nt.flstransaktion_id
+                                   And nftp.portefoelje_id = nt.portefoelje_id))
+                  Loop
+                     wkaction := 'tr ' || to_char (rowtr.transaktion_id);
+                     wki := wki + 1;
+                     htp.p ('wki ' || wki);
+                     pac_transaktion.commit_tran (rowtr.transaktion_id);
+                  End Loop;
+
+                  wkaction := 'ins fls';
+
+                  Insert Into flstransaktion
+                              (flstransaktion_id
+                              ,papir1_id
+                              ,papir2_id
+                              ,trantype_id
+                              ,termindato
+                              ,valoerdato
+                              ,beloeb_enhed
+                              ,skat_pct
+                              ,refund_pct
+                              ,bytteforhold1
+                              ,bytteforhold2
+                              ,salgskurs
+                              ,reg_dato
+                              ,reg_user)
+                       Values (Row.flstransaktion_id
+                              ,Row.papir1_id
+                              ,Row.papir2_id
+                              ,Row.trantype_id
+                              ,Row.termindato
+                              ,Row.valoerdato
+                              ,Row.beloeb_enhed
+                              ,Row.skat_pct
+                              ,Row.refund_pct
+                              ,Row.bytteforhold1
+                              ,Row.bytteforhold2
+                              ,Row.salgskurs
+                              ,sysdate
+                              ,User);
+               End Loop;
+            Exception
+               When Others
+               Then
+                  cg$errors.push ('Fejl: ' || sqlerrm
+                                 ,loc      =>    'm_flstran.ny('
+                                              || wkaction
+                                              || ')');
+                  Rollback;
+            End;
+         Else
+            wki := 0;
+
+            Begin
+               For rowtr In
+                  (Select transaktion_id
+                     From nytransaktion nt
+                    Where flstransaktion_id =
+                                           pac_glo.ag_to_number (p_flstran_id)
+                      And Exists (
+                             Select 1
+                               From nyflstranport nftp
+                              Where nftp.flstransaktion_id =
+                                                          nt.flstransaktion_id
+                                And nftp.portefoelje_id = nt.portefoelje_id))
+               Loop
+                  wkaction := 'tr ' || to_char (rowtr.transaktion_id);
+                  wki := wki + 1;
+                  pac_transaktion.commit_tran (rowtr.transaktion_id);
+               End Loop;
+
+               wkaction := 'ins fls';
+
+               Insert Into flstransaktion
+                           (flstransaktion_id
+                           ,papir1_id
+                           ,papir2_id
+                           ,trantype_id
+                           ,termindato
+                           ,valoerdato
+                           ,beloeb_enhed
+                           ,skat_pct
+                           ,refund_pct
+                           ,bytteforhold1
+                           ,bytteforhold2
+                           ,salgskurs
+                           ,reg_dato
+                           ,reg_user)
+                    Values (Row.flstransaktion_id
+                           ,Row.papir1_id
+                           ,Row.papir2_id
+                           ,Row.trantype_id
+                           ,Row.termindato
+                           ,Row.valoerdato
+                           ,Row.beloeb_enhed
+                           ,Row.skat_pct
+                           ,Row.refund_pct
+                           ,Row.bytteforhold1
+                           ,Row.bytteforhold2
+                           ,Row.salgskurs
+                           ,sysdate
+                           ,User);
+            Exception
+               When Others
+               Then
+                  cg$errors.push ('Fejl: ' || sqlerrm
+                                 ,loc      =>    'm_flstran.ny('
+                                              || wkaction
+                                              || ')');
+                  Rollback;
+            End;
+         End If;
+
+         cg$errors.push (to_char (wki) || ' transaktion(er) bekræftet'
+                        ,loc        => 'm_flstran.ny'
+                        ,error      => 'I');
+         vis_flstran (p_flstran_id      => p_flstran_id
+                     ,p_gruppe_id       => p_gruppe_id);
+         Return;
+      End If;
+
+      If z_action = 'XX'
+      Then
+         wktt := rowv.trantype_kode;
+
+         Select Max (nfg.flstrangruppe_id)
+           Into wkgruppe_id
+           From nyflstrangruppe nfg
+          Where nfg.flstransaktion_id = rowv.flstransaktion_id;
+      End If;
+
+      pac_sql.build_form_select
+         ('P_TRANTYPE_ID'
+         ,pac_sql.build_select_sql (   'select trantype_id,betegnelse '
+                                    || ' from sys_trantype '
+                                    || ' where fls_janej = ''J''  '
+                                    || '  order by 1 '
+                                   ,'trantype_id'
+                                   ,nvl (pac_glo.ag_to_number (p_trantype_id)
+                                        ,Row.trantype_id))
+         ,Null
+         ,False
+         ,wkttliste);
+      pac_sql.add_var (wkvartab
+                      ,'P_FLSTRAN_ID'
+                      ,Row.flstransaktion_id);
+      pac_sql.add_var (wkvartab
+                      ,'P_PAPIR1'
+                      ,rowv.papir1);
+      pac_sql.add_var (wkvartab
+                      ,'P_PAPIR2'
+                      ,rowv.papir2);
+      pac_sql.add_var (wkvartab
+                      ,'P_NAVN1'
+                      ,rowv.papir1_navn);
+      pac_sql.add_var (wkvartab
+                      ,'P_NAVN2'
+                      ,rowv.papir2_navn);
+      pac_sql.add_var (wkvartab
+                      ,'P_TERMINDATO1'
+                      ,to_char (wkdato1, 'dd-mm-yyyy'));
+      pac_sql.add_var (wkvartab
+                      ,'P_TERMINDATO2'
+                      ,to_char (wkdato2, 'dd-mm-yyyy'));
+      pac_sql.add_var (wkvartab
+                      ,'P_VALOERDATO'
+                      ,pac_glo.ag_to_date(wkvaloerdato));
+      pac_sql.add_var (wkvartab
+                      ,'P_BOGFDATO'
+                      ,pac_glo.ag_to_date(wkbogfdato));
+      pac_sql.add_var (wkvartab
+                      ,'P_BYT1'
+                      ,Row.bytteforhold1);
+      pac_sql.add_var (wkvartab
+                      ,'P_BYT2'
+                      ,Row.bytteforhold2);
+      pac_sql.add_var (wkvartab
+                      ,'P_KURS'
+                      ,Row.salgskurs);
+      pac_sql.add_var (wkvartab
+                      ,'P_TRANTYPELISTE'
+                      ,wkttliste);
+      pac_sql.add_var (wkvartab
+                      ,'P_GRUPPE_ID'
+                      ,wkgruppe_id);
+      pac_sql.add_var (wkvartab
+                      ,'P_SKAT_PCT'
+                      ,Row.skat_pct);
+      pac_sql.add_var (wkvartab
+                      ,'P_REFUND_PCT'
+                      ,Row.refund_pct);
+      pac_sql.add_var (wkvartab
+                      ,'P_BLBENHED'
+                      ,Row.beloeb_enhed);
+      pac_sql.add_var (wkvartab
+                      ,'P_AFRPAPIR'
+                      ,wkafrpapir);
+      pac_sql.add_var (wkvartab
+                      ,'P_OLD_AFRPAPIR'
+                      ,'');
+
+      Select Max (trantype_kode)
+        Into wktt
+        From sys_trantype
+       Where trantype_id =
+                   nvl (pac_glo.ag_to_number (p_trantype_id), Row.trantype_id);
+
+      pac_form.display ('NYFLS' || wktt
+                       ,Null
+                       ,'OVS'
+                       ,wkvartab
+                       ,Null);
+   Exception
+      When Others
+      Then
+         cg$errors.push ('Fejl: ' || sqlerrm
+                        ,loc      => 'm_flstran.ny(' || wkaction || ')');
+         pac_form.display ('FLSTRA'
+                          ,Null
+                          ,'OVS'
+                          ,wkvartab
+                          ,Null);
+   End;
+
+   Procedure Startup (
+      p_papir           In   Varchar2 Default Null
+     ,p_flstran_id      In   Varchar2 Default Null
+     ,z_action          In   Varchar2 Default 'x'
+     ,p_trantype_kode   In   Varchar2 Default Null
+     ,p_nytrantype_id   In   Varchar2 Default Null
+     ,p_td_l            In   Varchar2 Default Null
+     ,p_td_h            In   Varchar2 Default Null
+     ,p_vd_l            In   Varchar2 Default Null
+     ,p_vd_h            In   Varchar2 Default Null
+     ,p_tabrow          In   Varchar2 Default '1'
+     ,p_tabpage         In   Varchar2 Default '20')
+   Is
+      wksql          Varchar2 (30000);
+      wkwhere        Varchar2 (20000);
+      wkaction       Varchar2 (20);
+      wkvartab       pac_sql.vartable;
+      wktabrow       Number;
+      wktablastrow   Number;
+      wktabpage      Number;
+      wktabsize      Number;
+      wkttliste      Varchar2 (1000);
+   Begin
+      If z_action = 'NEW'
+      Then
+         ny (p_trantype_id      => p_nytrantype_id);
+         Return;
+      End If;
+
+      wkaction := z_action;
+      wktabrow := pac_glo.ag_to_number (p_tabrow);
+      wktabpage := pac_glo.ag_to_number (p_tabpage);
+
+      If z_action Is Null
+      Then
+         wkwhere := 'Where (1=2)';
+      Else
+         wkwhere := Null;
+      End If;
+
+      pac_form.get_sql ('FLSTRA', wksql);
+      pac_sql.buildwhere (wksql
+                         ,wkwhere
+                         ,prmcol2        => 'Papir1'
+                         ,prmsval2       => upper (p_papir)
+                         ,prmcol3        => 'trantype_kode'
+                         ,prmsval3       => upper (p_trantype_kode)
+                         ,prmncol1       => 'flsTransaktion_Id'
+                         ,prmnval1f      => pac_glo.ag_to_number (p_flstran_id)
+                         ,prmnval1t      => pac_glo.ag_to_number (p_flstran_id)
+                         ,prmdcol1       => 'termindato'
+                         ,prmdval1f      => p_td_l
+                         ,prmdval1t      => p_td_h
+                         ,prmdcol2       => 'valoerdato'
+                         ,prmdval2f      => p_vd_l
+                         ,prmdval2t      => p_vd_h);
+      pac_sql.tabpage (wksql
+                      ,wkvartab
+                      ,wkaction
+                      ,wktabrow
+                      ,wktablastrow
+                      ,wktabpage
+                      ,wktabsize);
+      pac_sql.build_form_select
+             ('P_NYTRANTYPE_ID'
+             ,pac_sql.build_select_sql (   'select trantype_id,betegnelse '
+                                        || ' from sys_trantype '
+                                        || ' where fls_janej = ''J''  '
+                                        || '  order by 1 '
+                                       ,'trantype_id'
+                                       ,pac_glo.ag_to_number (p_nytrantype_id))
+             ,'onChange="{Z_ACTION.value=''NEW'';submit();}"'
+             ,True
+             ,wkttliste);
+      pac_sql.add_var (wkvartab
+                      ,'Z_WHERE'
+                      ,wkwhere);
+      pac_sql.add_var (wkvartab
+                      ,'Z_ACTION'
+                      ,z_action);
+      pac_sql.add_var (wkvartab
+                      ,'P_PAPIR'
+                      ,p_papir);
+      pac_sql.add_var (wkvartab
+                      ,'P_TTLISTE'
+                      ,wkttliste);
+      pac_sql.add_var (wkvartab
+                      ,'P_TRANTYPE_KODE'
+                      ,p_trantype_kode);
+      pac_sql.add_var (wkvartab
+                      ,'P_NYTRANTYPE_ID'
+                      ,p_nytrantype_id);
+      pac_sql.add_var (wkvartab
+                      ,'P_TD_L'
+                      ,p_td_l);
+      pac_sql.add_var (wkvartab
+                      ,'P_TD_H'
+                      ,p_td_h);
+      pac_sql.add_var (wkvartab
+                      ,'P_VD_L'
+                      ,p_vd_l);
+      pac_sql.add_var (wkvartab
+                      ,'P_VD_H'
+                      ,p_vd_h);
+      pac_form.display ('FLSTRA'
+                       ,Null
+                       ,'OVS'
+                       ,wkvartab
+                       ,wksql);
+   End;
+
+   Procedure valkurs (
+      p_flstran_id   In   Varchar2 Default Null)
+   Is
+      wkvartab   pac_sql.vartable;
+   Begin
+      pac_sql.add_var (wkvartab
+                      ,'P_FLSTRAN_ID'
+                      ,pac_glo.ag_to_number (p_flstran_id));
+      pac_form.display ('NYFLSVK'
+                       ,Null
+                       ,'OVS'
+                       ,wkvartab
+                       ,Null);
+   End;
+
+   Procedure retvk (
+      p_flstran_id   In   Varchar2 Default Null
+     ,p_gruppe_id    In   Varchar2 Default Null
+     ,p_val1         In   Varchar2 Default Null
+     ,p_val2         In   Varchar2 Default Null
+     ,p_kurs         In   Varchar2 Default Null
+     ,z_action       In   Varchar2 Default Null)
+   Is
+      wkvartab      pac_sql.vartable;
+      wkval1        valuta.valuta%Type;
+      wkval2        valuta.valuta%Type;
+      wkgruppe_id   Number              := pac_glo.ag_to_number (p_gruppe_id);
+   Begin
+      If z_action = 'UPDATE'
+      Then
+         If wkgruppe_id = -1
+         Then
+            Update nyflstranvalutakurs
+               Set kurs = nvl (pac_glo.ag_to_number (p_kurs), kurs)
+             Where flstransaktion_id = pac_glo.ag_to_number (p_flstran_id)
+               And valuta1_id = pac_glo.ag_to_number (p_val1)
+               And valuta2_id = pac_glo.ag_to_number (p_val2);
+         Else
+            Update nyflstranvalutakurs
+               Set kurs = nvl (pac_glo.ag_to_number (p_kurs), kurs)
+             Where flstransaktion_id In (
+                                      Select nfg.flstransaktion_id
+                                        From nyflstrangruppe nfg
+                                       Where nfg.flstrangruppe_id =
+                                                                   wkgruppe_id)
+               And valuta1_id = pac_glo.ag_to_number (p_val1)
+               And valuta2_id = pac_glo.ag_to_number (p_val2);
+         End If;
+      Else
+         Select Max (valuta)
+           Into wkval1
+           From valuta
+          Where valuta_id = pac_glo.ag_to_number (p_val1);
+
+         Select Max (valuta)
+           Into wkval2
+           From valuta
+          Where valuta_id = pac_glo.ag_to_number (p_val2);
+
+         pac_sql.add_var (wkvartab
+                         ,'P_FLSTRAN_ID'
+                         ,pac_glo.ag_to_number (p_flstran_id));
+         pac_sql.add_var (wkvartab
+                         ,'P_GRUPPE_ID'
+                         ,pac_glo.ag_to_number (p_gruppe_id));
+         pac_sql.add_var (wkvartab
+                         ,'P_VAL1'
+                         ,pac_glo.ag_to_number (p_val1));
+         pac_sql.add_var (wkvartab
+                         ,'P_VAL2'
+                         ,pac_glo.ag_to_number (p_val2));
+         pac_sql.add_var (wkvartab
+                         ,'P_TVAL1'
+                         ,wkval1);
+         pac_sql.add_var (wkvartab
+                         ,'P_TVAL2'
+                         ,wkval2);
+         pac_sql.add_var (wkvartab
+                         ,'P_KURS'
+                         ,pac_glo.ag_to_number (p_kurs));
+         pac_form.display ('NYFLSVK2'
+                          ,Null
+                          ,'OVS'
+                          ,wkvartab
+                          ,Null);
+      End If;
+
+      valkurs (p_flstran_id);
+   End;
+End m_flstran;
